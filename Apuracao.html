@@ -1,0 +1,416 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>TSE 2026 — Presidential Runoff</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #0b1120;
+      --panel: #151e30;
+      --border: #293850;
+      --text: #e5edf8;
+      --muted: #91a1ba;
+      --accent: #60a5fa;
+      --green: #34d399;
+      --red: #fb7185;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      padding: 28px 18px;
+      background: var(--bg);
+      color: var(--text);
+      font-family: Arial, sans-serif;
+    }
+
+    main { max-width: 1100px; margin: auto; }
+
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 16px;
+      flex-wrap: wrap;
+      margin-bottom: 24px;
+    }
+
+    h1 { font-size: 25px; margin: 0 0 6px; }
+    h2 { font-size: 18px; margin: 0 0 18px; }
+    .muted { color: var(--muted); font-size: 13px; }
+
+    .status {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 9px 13px;
+      font-size: 12px;
+    }
+
+    .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--green);
+    }
+
+    .dot.error { background: var(--red); }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 14px;
+    }
+
+    .card, .panel {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 20px;
+      min-width: 0;
+    }
+
+    .label { color: var(--muted); font-size: 13px; }
+
+    .value {
+      font-size: clamp(22px, 3vw, 30px);
+      font-weight: 750;
+      margin: 12px 0 6px;
+      overflow-wrap: anywhere;
+    }
+
+    .subvalue { color: var(--muted); font-size: 12px; }
+
+    .progress {
+      height: 7px;
+      background: #25334a;
+      border-radius: 10px;
+      overflow: hidden;
+      margin-top: 14px;
+    }
+
+    .progress div {
+      height: 100%;
+      width: 0;
+      background: var(--accent);
+      transition: width .3s ease;
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: minmax(0, 1.1fr) minmax(0, .9fr);
+      gap: 14px;
+      margin-top: 14px;
+    }
+
+    .chart-wrap { height: 340px; }
+
+    .candidate {
+      padding: 15px 0;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .candidate:last-child { border-bottom: 0; }
+
+    .candidate-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      gap: 12px;
+    }
+
+    .candidate-name { font-weight: 650; }
+    .candidate-votes { font-weight: 700; white-space: nowrap; }
+    .candidate-meta { color: var(--muted); font-size: 12px; margin-top: 5px; }
+
+    .candidate-bar {
+      height: 6px;
+      background: #25334a;
+      border-radius: 10px;
+      overflow: hidden;
+      margin-top: 10px;
+    }
+
+    .candidate-bar div {
+      height: 100%;
+      background: var(--accent);
+    }
+
+    footer {
+      margin-top: 20px;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.7;
+    }
+
+    @media (max-width: 760px) {
+      .layout { grid-template-columns: 1fr; }
+      body { padding: 20px 12px; }
+      .chart-wrap { height: 300px; }
+    }
+  </style>
+</head>
+
+<body>
+<main>
+  <header>
+    <div>
+      <h1>Brazil 2026 — Presidential Runoff</h1>
+      <p class="muted">TSE official results · National overview</p>
+    </div>
+    <div class="status">
+      <span id="statusDot" class="dot"></span>
+      <span id="status">Connecting to TSE...</span>
+    </div>
+  </header>
+
+  <section class="grid">
+    <div class="card">
+      <div class="label">Total votes reported</div>
+      <div class="value" id="totalVotes">—</div>
+      <div class="subvalue">JSON field: v.tv</div>
+    </div>
+
+    <div class="card">
+      <div class="label">Valid candidate votes</div>
+      <div class="value" id="validVotes">—</div>
+      <div class="subvalue">JSON field: v.vvc</div>
+    </div>
+
+    <div class="card">
+      <div class="label">Polling sections totalized</div>
+      <div class="value" id="sections">—</div>
+      <div class="subvalue" id="sectionPercent">—</div>
+      <div class="progress"><div id="sectionBar"></div></div>
+    </div>
+
+    <div class="card">
+      <div class="label">Electorate accounted for</div>
+      <div class="value" id="electorate">—</div>
+      <div class="subvalue" id="electoratePercent">—</div>
+      <div class="progress"><div id="electorateBar"></div></div>
+    </div>
+  </section>
+
+  <section class="layout">
+    <div class="panel">
+      <h2>Candidate vote distribution</h2>
+      <div class="chart-wrap">
+        <canvas id="pieChart"></canvas>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>Candidate totals</h2>
+      <div id="candidates" class="muted">Waiting for data...</div>
+    </div>
+  </section>
+
+  <footer>
+    <div id="timestamp">Last successful update: —</div>
+    <div>Refresh interval: 1 second.</div>
+    <div>If browser requests fail, check CORS access to the TSE endpoint.</div>
+  </footer>
+</main>
+
+<script>
+const DATA_URL =
+  "https://resultados.tse.jus.br/oficial/ele2026/6258/dados/br/br-c0001-e006258-u.json";
+
+const fmt = value =>
+  (Number(value) || 0).toLocaleString("en-US");
+
+const pct = value =>
+  `${(Number(value) || 0).toLocaleString("en-US", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  })}%`;
+
+let chart = null;
+let busy = false;
+
+function extractCandidates(data) {
+  const result = [];
+
+  for (const office of data.carg || []) {
+    for (const group of office.agr || []) {
+      for (const party of group.par || []) {
+        for (const candidate of party.cand || []) {
+          result.push({
+            name: candidate.nmu || candidate.nm || "Unknown",
+            party: party.sg || party.nm || "",
+            votes: Number(candidate.vap) || 0
+          });
+        }
+      }
+    }
+  }
+
+  return result;
+}
+
+function escapeHTML(value) {
+  return String(value).replace(/[&<>"']/g, char => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': "&quot;",
+    "'": "&#39;"
+  })[char]);
+}
+
+function setProgressBar(id, value) {
+  const safe = Math.max(0, Math.min(100, Number(value) || 0));
+  document.getElementById(id).style.width = `${safe}%`;
+}
+
+function renderChart(candidates) {
+  const colors = ["#60a5fa", "#34d399", "#fbbf24", "#c084fc"];
+
+  if (!chart) {
+    chart = new Chart(document.getElementById("pieChart"), {
+      type: "pie",
+      data: {
+        labels: candidates.map(c => c.name),
+        datasets: [{
+          data: candidates.map(c => c.votes),
+          backgroundColor: candidates.map((_, i) =>
+            colors[i % colors.length]),
+          borderColor: "#151e30",
+          borderWidth: 3
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: {
+            position: "bottom",
+            labels: { color: "#e5edf8", padding: 18 }
+          },
+          tooltip: {
+            callbacks: {
+              label: item => {
+                const total = item.dataset.data.reduce((a, b) => a + b, 0);
+                const share = total ? item.raw / total * 100 : 0;
+                return `${item.label}: ${fmt(item.raw)} (${pct(share)})`;
+              }
+            }
+          }
+        }
+      }
+    });
+  } else {
+    chart.data.labels = candidates.map(c => c.name);
+    chart.data.datasets[0].data = candidates.map(c => c.votes);
+    chart.data.datasets[0].backgroundColor =
+      candidates.map((_, i) => colors[i % colors.length]);
+    chart.update("none");
+  }
+}
+
+function renderCandidates(candidates) {
+  const total = candidates.reduce((sum, c) => sum + c.votes, 0);
+
+  document.getElementById("candidates").innerHTML =
+    candidates.map(c => {
+      const share = total ? c.votes / total * 100 : 0;
+
+      return `
+        <div class="candidate">
+          <div class="candidate-head">
+            <span class="candidate-name">${escapeHTML(c.name)}</span>
+            <span class="candidate-votes">${fmt(c.votes)}</span>
+          </div>
+          <div class="candidate-meta">
+            ${escapeHTML(c.party)} · ${pct(share)} of candidate votes
+          </div>
+          <div class="candidate-bar">
+            <div style="width:${Math.max(0, Math.min(100, share))}%"></div>
+          </div>
+        </div>`;
+    }).join("");
+}
+
+async function refresh() {
+  if (busy) return;
+  busy = true;
+
+  try {
+    const response = await fetch(DATA_URL, { cache: "no-store" });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+    const data = await response.json();
+    const candidates = extractCandidates(data);
+
+    if (!candidates.length) {
+      throw new Error("No candidates found in the JSON");
+    }
+
+    const s = data.s || {};
+    const e = data.e || {};
+    const v = data.v || {};
+
+    // Correct fields from the supplied TSE JSON:
+    // s.st = sections totalized; s.ts = total sections.
+    const countedSections = Number(s.st) || 0;
+    const totalSections = Number(s.ts) || 0;
+    const sectionsPercent = Number(s.pst) || 0;
+
+    document.getElementById("sections").textContent =
+      `${fmt(countedSections)} / ${fmt(totalSections)}`;
+
+    document.getElementById("sectionPercent").textContent =
+      `${pct(sectionsPercent)} totalized`;
+
+    setProgressBar("sectionBar", sectionsPercent);
+
+    // e.est = electorate in totalized sections; e.te = total electorate.
+    const accountedElectorate = Number(e.est) || 0;
+    const totalElectorate = Number(e.te) || 0;
+    const electoratePercent = Number(e.pest) || 0;
+
+    document.getElementById("electorate").textContent =
+      `${fmt(accountedElectorate)} / ${fmt(totalElectorate)}`;
+
+    document.getElementById("electoratePercent").textContent =
+      `${pct(electoratePercent)} accounted for`;
+
+    setProgressBar("electorateBar", electoratePercent);
+
+    document.getElementById("totalVotes").textContent = fmt(v.tv);
+    document.getElementById("validVotes").textContent = fmt(v.vvc);
+
+    renderChart(candidates);
+    renderCandidates(candidates);
+
+    document.getElementById("status").textContent =
+      `Connected · TSE time ${data.hg || "unknown"}`;
+
+    document.getElementById("statusDot").classList.remove("error");
+    document.getElementById("timestamp").textContent =
+      `Last successful update: ${new Date().toLocaleTimeString()}`;
+
+  } catch (error) {
+    document.getElementById("status").textContent =
+      `Update failed: ${error.message}`;
+    document.getElementById("statusDot").classList.add("error");
+  } finally {
+    busy = false;
+  }
+}
+
+refresh();
+setInterval(refresh, 1000);
+</script>
+</body>
+</html>
