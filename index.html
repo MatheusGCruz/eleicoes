@@ -1,0 +1,464 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>TSE 2026 — Live Results Dashboard</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #0b1020;
+      --panel: #151d30;
+      --border: #28344b;
+      --text: #f1f5f9;
+      --muted: #9ba9bd;
+      --green: #34d399;
+      --blue: #2563eb;
+      --orange: #fbbf24;
+      --red: #dc2626;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; padding: 24px; background: var(--bg); color: var(--text);
+      font-family: system-ui, -apple-system, Segoe UI, sans-serif;
+    }
+    .container { max-width: 1200px; margin: auto; }
+    header {
+      display: flex; align-items: center; justify-content: space-between;
+      gap: 16px; flex-wrap: wrap; margin-bottom: 24px;
+    }
+    h1 { margin: 0; font-size: clamp(1.5rem, 4vw, 2.2rem); }
+    h2 { font-size: 1.1rem; margin-top: 0; }
+    .muted { color: var(--muted); }
+    .small { font-size: .88rem; }
+    .status {
+      display: inline-flex; align-items: center; gap: 8px; padding: 8px 12px;
+      border: 1px solid var(--border); border-radius: 999px; font-size: .9rem;
+    }
+    .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--orange); }
+    .dot.online { background: var(--green); }
+    .dot.error { background: var(--red); }
+    .grid {
+      display: grid; grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 16px; margin-bottom: 16px;
+    }
+    .panel {
+      background: var(--panel); border: 1px solid var(--border);
+      border-radius: 16px; padding: 20px; min-width: 0;
+    }
+    .metric-label { color: var(--muted); font-size: .88rem; margin-bottom: 10px; }
+    .metric-value {
+      font-size: clamp(1.3rem, 3vw, 2rem); font-weight: 750; overflow-wrap: anywhere;
+    }
+    .metric-detail { color: var(--muted); font-size: .85rem; margin-top: 8px; }
+    .timers {
+      display: grid; grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 16px; margin-bottom: 16px;
+    }
+    .timer-value {
+      font-size: clamp(1.25rem, 3vw, 1.8rem); font-weight: 750; margin: 10px 0;
+      font-variant-numeric: tabular-nums;
+    }
+    .green { color: var(--green); }
+    .blue { color: #60a5fa; }
+    .orange { color: var(--orange); }
+    .progress {
+      height: 9px; background: #273249; border-radius: 99px;
+      overflow: hidden; margin-top: 12px;
+    }
+    .progress-bar {
+      height: 100%; width: 0%; background: var(--green); transition: width .4s ease;
+    }
+    .content {
+      display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(300px, .8fr);
+      gap: 16px;
+    }
+    #chart-wrap { max-width: 440px; margin: auto; position: relative; height: 340px; }
+    .candidate { padding: 14px 0; border-bottom: 1px solid var(--border); }
+    .candidate:last-child { border-bottom: 0; }
+    .candidate-top { display: flex; justify-content: space-between; gap: 12px; align-items: start; }
+    .candidate-name { font-weight: 700; }
+    .candidate-party { color: var(--muted); font-size: .85rem; margin-top: 4px; }
+    .candidate-votes { text-align: right; font-weight: 700; white-space: nowrap; }
+    .candidate-percent { color: var(--green); font-size: .95rem; margin-top: 4px; }
+    .footer { margin-top: 18px; color: var(--muted); font-size: .8rem; line-height: 1.6; }
+    @media (max-width: 850px) {
+      .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .timers { grid-template-columns: 1fr; }
+      .content { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 480px) {
+      body { padding: 12px; }
+      .grid { gap: 10px; }
+      .panel { padding: 15px; }
+    }
+  </style>
+</head>
+<body>
+<div class="container">
+  <header>
+    <div>
+      <h1>TSE 2026 — Live Results</h1>
+      <div class="muted small">Presidential election · Brazil · Second round</div>
+    </div>
+    <div class="status">
+      <span id="status-dot" class="dot"></span>
+      <span id="connection-status">Connecting to TSE...</span>
+    </div>
+  </header>
+
+  <section class="timers">
+    <div class="panel">
+      <div class="metric-label">Last successful page refresh</div>
+      <div id="refresh-age" class="timer-value blue">Waiting...</div>
+      <div id="refresh-clock" class="metric-detail">No successful fetch yet</div>
+      <div class="metric-detail">Automatic polling every 1 second</div>
+    </div>
+    <div class="panel">
+      <div class="metric-label">TSE reported last update</div>
+      <div id="tse-clock" class="timer-value orange">Waiting...</div>
+      <div id="tse-date" class="metric-detail">Awaiting timestamp from JSON</div>
+      <div id="tse-id" class="metric-detail"></div>
+    </div>
+    <div class="panel">
+      <div class="metric-label">Actual age of TSE data</div>
+      <div id="data-age" class="timer-value green">Waiting...</div>
+      <div id="difference-detail" class="metric-detail">
+        Difference between current time and TSE timestamp
+      </div>
+      <div class="metric-detail">Uses Brasília time (UTC−03:00)</div>
+    </div>
+  </section>
+
+  <section class="grid">
+    <div class="panel">
+      <div class="metric-label">Total votes</div>
+      <div id="total-votes" class="metric-value">—</div>
+      <div class="metric-detail">All vote categories</div>
+    </div>
+    <div class="panel">
+      <div class="metric-label">Valid candidate votes</div>
+      <div id="valid-votes" class="metric-value">—</div>
+      <div class="metric-detail">Votes for candidates</div>
+    </div>
+    <div class="panel">
+      <div class="metric-label">Sections totalized</div>
+      <div id="sections" class="metric-value">—</div>
+      <div id="sections-percent" class="metric-detail">—</div>
+      <div class="progress"><div id="sections-bar" class="progress-bar"></div></div>
+    </div>
+    <div class="panel">
+      <div class="metric-label">Electorate accounted for</div>
+      <div id="electorate" class="metric-value">—</div>
+      <div id="electorate-percent" class="metric-detail">—</div>
+      <div class="progress"><div id="electorate-bar" class="progress-bar"></div></div>
+    </div>
+  </section>
+
+  <section class="content">
+    <div class="panel">
+      <h2>Candidate vote share</h2>
+      <div id="chart-wrap"><canvas id="votes-chart"></canvas></div>
+    </div>
+    <div class="panel">
+      <h2>Candidate results</h2>
+      <div id="candidate-list" class="muted">Waiting for election data...</div>
+    </div>
+  </section>
+
+  <div class="footer">
+    Data source: TSE public results JSON. The page refresh timer measures successful fetches,
+    not necessarily new TSE data. A newer fetch can return the same election data.
+    <br /><span id="last-error"></span>
+  </div>
+</div>
+
+<script>
+  const DATA_URL =
+    "https://resultados.tse.jus.br/oficial/ele2026/6258/dados/br/br-c0001-e006258-u.json";
+  const POLL_INTERVAL_MS = 1000;
+
+  let lastSuccessfulFetch = null;
+  let tseTimestamp = null;
+  let chart = null;
+  let isFetching = false;
+
+  const numberFormat = new Intl.NumberFormat("en-US");
+  const OTHER_COLOR = "#64748b";
+  const PT_COLOR = "#dc2626"; // PT — red
+  const PL_COLOR = "#2563eb"; // PL — blue
+
+  function formatNumber(value) {
+    const n = Number(value);
+    return Number.isFinite(n) ? numberFormat.format(n) : "—";
+  }
+
+  function formatPercent(value) {
+    if (value === undefined || value === null || value === "") return "—";
+    const n = Number(String(value).replace(",", "."));
+    return Number.isFinite(n) ? n.toFixed(2) + "%" : String(value) + "%";
+  }
+
+  function setText(id, value) {
+    document.getElementById(id).textContent = value;
+  }
+
+  function setProgress(id, value) {
+    const n = Number(String(value ?? "0").replace(",", "."));
+    const percent = Number.isFinite(n) ? Math.max(0, Math.min(100, n)) : 0;
+    document.getElementById(id).style.width = percent + "%";
+  }
+
+  function setConnection(ok, message) {
+    const dot = document.getElementById("status-dot");
+    dot.className = "dot " + (ok ? "online" : "error");
+    setText("connection-status", message);
+  }
+
+  function formatDuration(milliseconds) {
+    if (!Number.isFinite(milliseconds)) return "Unavailable";
+    const totalSeconds = Math.max(0, Math.floor(milliseconds / 1000));
+    const days = Math.floor(totalSeconds / 86400);
+    const hours = Math.floor((totalSeconds % 86400) / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const seconds = totalSeconds % 60;
+    if (days > 0) return `${days}d ${hours}h ${minutes}m ${seconds}s`;
+    if (hours > 0) return `${hours}h ${minutes}m ${seconds}s`;
+    if (minutes > 0) return `${minutes}m ${seconds}s`;
+    return `${seconds}s`;
+  }
+
+  function formatLocalClock(date) {
+    return date.toLocaleTimeString(undefined, {
+      hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false
+    });
+  }
+
+  function formatLocalDate(date) {
+    return date.toLocaleDateString(undefined, {
+      year: "numeric", month: "short", day: "2-digit"
+    });
+  }
+
+  // TSE dt/ht fields are interpreted as Brasília local time (UTC−03:00).
+  function parseTseTimestamp(data) {
+    const dateString = data.dt || data.dg;
+    const timeString = data.ht || data.hg;
+    if (!dateString || !timeString) return null;
+
+    const dateParts = dateString.split("/").map(Number);
+    const timeParts = timeString.split(":").map(Number);
+    if (dateParts.length !== 3 || timeParts.length < 2) return null;
+
+    const [day, month, year] = dateParts;
+    const [hour, minute, second = 0] = timeParts;
+    if (![day, month, year, hour, minute, second].every(Number.isFinite)) return null;
+
+    const timestamp = Date.UTC(year, month - 1, day, hour + 3, minute, second);
+    const result = new Date(timestamp);
+    return Number.isNaN(result.getTime()) ? null : result;
+  }
+
+  function getCandidates(data) {
+    const cargo = data.carg?.find(item => item.cd === "1") || data.carg?.[0];
+    if (!cargo) return [];
+
+    const candidates = [];
+    for (const group of cargo.agr || []) {
+      for (const party of group.par || []) {
+        for (const candidate of party.cand || []) {
+          candidates.push({
+            name: candidate.nmu || candidate.nm || "Unknown candidate",
+            party: party.sg || party.nm || group.nm || "Unknown party",
+            votes: Number(candidate.vap || 0),
+            percent: Number(String(candidate.pvap || "0").replace(",", "."))
+          });
+        }
+      }
+    }
+    return candidates.sort((a, b) => b.votes - a.votes);
+  }
+
+  // Assign color by party abbreviation, not by ranking or array position.
+  function getCandidateColor(candidate) {
+    const party = String(candidate.party || "").toUpperCase().trim();
+    if (party === "PT" || party.startsWith("PT ")) return PT_COLOR;
+    if (party === "PL" || party.startsWith("PL ")) return PL_COLOR;
+    return OTHER_COLOR;
+  }
+
+  function updateChart(candidates) {
+    const labels = candidates.map(c => c.name);
+    const values = candidates.map(c => c.votes);
+    const colors = candidates.map(getCandidateColor);
+
+    if (!chart) {
+      chart = new Chart(document.getElementById("votes-chart"), {
+        type: "pie",
+        data: {
+          labels,
+          datasets: [{
+            data: values,
+            backgroundColor: colors,
+            borderColor: "#151d30",
+            borderWidth: 3
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: {
+              position: "bottom",
+              labels: { color: "#f1f5f9", padding: 18 }
+            },
+            tooltip: {
+              callbacks: {
+                label(context) {
+                  const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                  const percent = total ? context.raw / total * 100 : 0;
+                  return `${context.label}: ${formatNumber(context.raw)} (${percent.toFixed(2)}%)`;
+                }
+              }
+            }
+          }
+        }
+      });
+    } else {
+      chart.data.labels = labels;
+      chart.data.datasets[0].data = values;
+      chart.data.datasets[0].backgroundColor = colors;
+      chart.update("none");
+    }
+  }
+
+  function updateCandidateList(candidates) {
+    const list = document.getElementById("candidate-list");
+    list.replaceChildren();
+
+    if (!candidates.length) {
+      list.textContent = "No candidate data found in the response.";
+      return;
+    }
+
+    for (const candidate of candidates) {
+      const row = document.createElement("div");
+      row.className = "candidate";
+
+      const top = document.createElement("div");
+      top.className = "candidate-top";
+
+      const identity = document.createElement("div");
+      const name = document.createElement("div");
+      name.className = "candidate-name";
+      name.textContent = candidate.name;
+
+      const party = document.createElement("div");
+      party.className = "candidate-party";
+      party.textContent = candidate.party;
+      party.style.color = getCandidateColor(candidate);
+
+      identity.append(name, party);
+
+      const result = document.createElement("div");
+      result.className = "candidate-votes";
+      result.textContent = formatNumber(candidate.votes);
+
+      const percent = document.createElement("div");
+      percent.className = "candidate-percent";
+      percent.textContent = formatPercent(candidate.percent);
+
+      result.appendChild(percent);
+      top.append(identity, result);
+      row.appendChild(top);
+      list.appendChild(row);
+    }
+  }
+
+  function renderData(data) {
+    const votes = data.v || {};
+    const sections = data.s || {};
+    const electorate = data.e || {};
+
+    setText("total-votes", formatNumber(votes.tv));
+    setText("valid-votes", formatNumber(votes.vvc ?? votes.vv));
+
+    setText("sections", `${formatNumber(sections.st)} / ${formatNumber(sections.ts)}`);
+    setText("sections-percent", `${formatPercent(sections.pst)} totalized`);
+    setProgress("sections-bar", sections.pst);
+
+    setText("electorate", `${formatNumber(electorate.est)} / ${formatNumber(electorate.te)}`);
+    setText("electorate-percent", `${formatPercent(electorate.pest)} accounted for`);
+    setProgress("electorate-bar", electorate.pest);
+
+    const candidates = getCandidates(data);
+    updateChart(candidates);
+    updateCandidateList(candidates);
+
+    const timestamp = parseTseTimestamp(data);
+    if (timestamp) {
+      tseTimestamp = timestamp;
+      setText("tse-clock", formatLocalClock(timestamp));
+      setText("tse-date", formatLocalDate(timestamp) + " · Brasília time");
+      setText("tse-id", data.idg ? `TSE generation ID: ${data.idg}` : "");
+    } else {
+      setText("tse-clock", "Not provided");
+      setText("tse-date", "No valid dt/ht or dg/hg timestamp");
+      setText("tse-id", "");
+      tseTimestamp = null;
+    }
+  }
+
+  async function refreshData() {
+    if (isFetching) return;
+    isFetching = true;
+    try {
+      const response = await fetch(DATA_URL, { cache: "no-store" });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+      const data = await response.json();
+      lastSuccessfulFetch = new Date();
+      renderData(data);
+      setConnection(true, "Connected to TSE");
+      setText("last-error", "");
+      setText("refresh-clock", `Last successful fetch: ${formatLocalClock(lastSuccessfulFetch)}`);
+    } catch (error) {
+      setConnection(false, "Update failed");
+      setText("last-error", `Fetch error: ${error.message}. Check connectivity or CORS.`);
+    } finally {
+      isFetching = false;
+    }
+  }
+
+  function updateTimers() {
+    const now = new Date();
+
+    if (lastSuccessfulFetch) {
+      setText("refresh-age", formatDuration(now.getTime() - lastSuccessfulFetch.getTime()) + " ago");
+    } else {
+      setText("refresh-age", "Waiting...");
+    }
+
+    if (tseTimestamp) {
+      const difference = now.getTime() - tseTimestamp.getTime();
+      if (difference >= 0) {
+        setText("data-age", formatDuration(difference));
+        setText("difference-detail", "Elapsed since the TSE-reported timestamp");
+      } else {
+        setText("data-age", "Clock mismatch");
+        setText("difference-detail", `TSE timestamp is ${formatDuration(Math.abs(difference))} in the future; check your clock`);
+      }
+    } else {
+      setText("data-age", "Unavailable");
+      setText("difference-detail", "Waiting for a valid TSE timestamp");
+    }
+  }
+
+  refreshData();
+  setInterval(refreshData, POLL_INTERVAL_MS);
+  updateTimers();
+  setInterval(updateTimers, 1000);
+</script>
+</body>
+</html>

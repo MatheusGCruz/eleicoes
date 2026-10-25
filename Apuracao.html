@@ -2,21 +2,21 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>TSE 2026 — Presidential Runoff</title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>TSE 2026 — Live Results Dashboard</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-
   <style>
     :root {
       color-scheme: dark;
-      --bg: #0b1120;
-      --panel: #151e30;
-      --border: #293850;
-      --text: #e5edf8;
-      --muted: #91a1ba;
-      --accent: #60a5fa;
+      --bg: #0b1020;
+      --panel: #151d30;
+      --border: #28344b;
+      --text: #f1f5f9;
+      --muted: #9ba9bd;
       --green: #34d399;
+      --blue: #60a5fa;
+      --orange: #fbbf24;
       --red: #fb7185;
     }
 
@@ -24,393 +24,572 @@
 
     body {
       margin: 0;
-      padding: 28px 18px;
+      padding: 24px;
       background: var(--bg);
       color: var(--text);
-      font-family: Arial, sans-serif;
+      font-family: system-ui, -apple-system, Segoe UI, sans-serif;
     }
 
-    main { max-width: 1100px; margin: auto; }
+    .container {
+      max-width: 1200px;
+      margin: auto;
+    }
 
     header {
       display: flex;
-      justify-content: space-between;
       align-items: center;
+      justify-content: space-between;
       gap: 16px;
       flex-wrap: wrap;
       margin-bottom: 24px;
     }
 
-    h1 { font-size: 25px; margin: 0 0 6px; }
-    h2 { font-size: 18px; margin: 0 0 18px; }
-    .muted { color: var(--muted); font-size: 13px; }
+    h1 { margin: 0; font-size: clamp(1.5rem, 4vw, 2.2rem); }
+    h2 { font-size: 1.1rem; margin-top: 0; }
+    .muted { color: var(--muted); }
+    .small { font-size: .88rem; }
 
     .status {
-      display: flex;
+      display: inline-flex;
       align-items: center;
       gap: 8px;
-      background: var(--panel);
+      padding: 8px 12px;
       border: 1px solid var(--border);
-      border-radius: 20px;
-      padding: 9px 13px;
-      font-size: 12px;
+      border-radius: 999px;
+      font-size: .9rem;
     }
 
     .dot {
-      width: 8px;
-      height: 8px;
+      width: 9px;
+      height: 9px;
       border-radius: 50%;
-      background: var(--green);
+      background: var(--orange);
     }
 
+    .dot.online { background: var(--green); }
     .dot.error { background: var(--red); }
 
     .grid {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-      gap: 14px;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 16px;
+      margin-bottom: 16px;
     }
 
-    .card, .panel {
+    .panel {
       background: var(--panel);
       border: 1px solid var(--border);
-      border-radius: 14px;
+      border-radius: 16px;
       padding: 20px;
       min-width: 0;
     }
 
-    .label { color: var(--muted); font-size: 13px; }
+    .metric-label {
+      color: var(--muted);
+      font-size: .88rem;
+      margin-bottom: 10px;
+    }
 
-    .value {
-      font-size: clamp(22px, 3vw, 30px);
+    .metric-value {
+      font-size: clamp(1.3rem, 3vw, 2rem);
       font-weight: 750;
-      margin: 12px 0 6px;
       overflow-wrap: anywhere;
     }
 
-    .subvalue { color: var(--muted); font-size: 12px; }
+    .metric-detail {
+      color: var(--muted);
+      font-size: .85rem;
+      margin-top: 8px;
+    }
+
+    .timers {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 16px;
+      margin-bottom: 16px;
+    }
+
+    .timer-value {
+      font-size: clamp(1.25rem, 3vw, 1.8rem);
+      font-weight: 750;
+      margin: 10px 0;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .green { color: var(--green); }
+    .blue { color: var(--blue); }
+    .orange { color: var(--orange); }
 
     .progress {
-      height: 7px;
-      background: #25334a;
-      border-radius: 10px;
+      height: 9px;
+      background: #273249;
+      border-radius: 99px;
       overflow: hidden;
-      margin-top: 14px;
+      margin-top: 12px;
     }
 
-    .progress div {
+    .progress-bar {
       height: 100%;
-      width: 0;
-      background: var(--accent);
-      transition: width .3s ease;
+      width: 0%;
+      background: var(--green);
+      transition: width .4s ease;
     }
 
-    .layout {
+    .content {
       display: grid;
-      grid-template-columns: minmax(0, 1.1fr) minmax(0, .9fr);
-      gap: 14px;
-      margin-top: 14px;
+      grid-template-columns: minmax(0, 1.2fr) minmax(300px, .8fr);
+      gap: 16px;
     }
 
-    .chart-wrap { height: 340px; }
+    #chart-wrap {
+      max-width: 440px;
+      margin: auto;
+      position: relative;
+      height: 340px;
+    }
 
     .candidate {
-      padding: 15px 0;
+      padding: 14px 0;
       border-bottom: 1px solid var(--border);
     }
 
     .candidate:last-child { border-bottom: 0; }
 
-    .candidate-head {
+    .candidate-top {
       display: flex;
       justify-content: space-between;
-      align-items: baseline;
       gap: 12px;
+      align-items: start;
     }
 
-    .candidate-name { font-weight: 650; }
-    .candidate-votes { font-weight: 700; white-space: nowrap; }
-    .candidate-meta { color: var(--muted); font-size: 12px; margin-top: 5px; }
+    .candidate-name { font-weight: 700; }
+    .candidate-party { color: var(--muted); font-size: .85rem; margin-top: 4px; }
+    .candidate-votes { text-align: right; font-weight: 700; white-space: nowrap; }
+    .candidate-percent { color: var(--green); font-size: .95rem; margin-top: 4px; }
 
-    .candidate-bar {
-      height: 6px;
-      background: #25334a;
-      border-radius: 10px;
-      overflow: hidden;
-      margin-top: 10px;
-    }
-
-    .candidate-bar div {
-      height: 100%;
-      background: var(--accent);
-    }
-
-    footer {
-      margin-top: 20px;
+    .footer {
+      margin-top: 18px;
       color: var(--muted);
-      font-size: 12px;
-      line-height: 1.7;
+      font-size: .8rem;
+      line-height: 1.6;
     }
 
-    @media (max-width: 760px) {
-      .layout { grid-template-columns: 1fr; }
-      body { padding: 20px 12px; }
-      .chart-wrap { height: 300px; }
+    @media (max-width: 850px) {
+      .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .timers { grid-template-columns: 1fr; }
+      .content { grid-template-columns: 1fr; }
+    }
+
+    @media (max-width: 480px) {
+      body { padding: 12px; }
+      .grid { gap: 10px; }
+      .panel { padding: 15px; }
     }
   </style>
 </head>
-
 <body>
-<main>
+<div class="container">
   <header>
     <div>
-      <h1>Brazil 2026 — Presidential Runoff</h1>
-      <p class="muted">TSE official results · National overview</p>
+      <h1>TSE 2026 — Live Results</h1>
+      <div class="muted small">Presidential election · Brazil · Second round</div>
     </div>
     <div class="status">
-      <span id="statusDot" class="dot"></span>
-      <span id="status">Connecting to TSE...</span>
+      <span id="status-dot" class="dot"></span>
+      <span id="connection-status">Connecting to TSE...</span>
     </div>
   </header>
 
-  <section class="grid">
-    <div class="card">
-      <div class="label">Total votes reported</div>
-      <div class="value" id="totalVotes">—</div>
-      <div class="subvalue">JSON field: v.tv</div>
-    </div>
-
-    <div class="card">
-      <div class="label">Valid candidate votes</div>
-      <div class="value" id="validVotes">—</div>
-      <div class="subvalue">JSON field: v.vvc</div>
-    </div>
-
-    <div class="card">
-      <div class="label">Polling sections totalized</div>
-      <div class="value" id="sections">—</div>
-      <div class="subvalue" id="sectionPercent">—</div>
-      <div class="progress"><div id="sectionBar"></div></div>
-    </div>
-
-    <div class="card">
-      <div class="label">Electorate accounted for</div>
-      <div class="value" id="electorate">—</div>
-      <div class="subvalue" id="electoratePercent">—</div>
-      <div class="progress"><div id="electorateBar"></div></div>
-    </div>
-  </section>
-
-  <section class="layout">
+  <!-- Live timing indicators -->
+  <section class="timers">
     <div class="panel">
-      <h2>Candidate vote distribution</h2>
-      <div class="chart-wrap">
-        <canvas id="pieChart"></canvas>
+      <div class="metric-label">Last successful page refresh</div>
+      <div id="refresh-age" class="timer-value blue">Waiting...</div>
+      <div id="refresh-clock" class="metric-detail">No successful fetch yet</div>
+      <div class="metric-detail">Automatic polling every 1 second</div>
+    </div>
+
+    <div class="panel">
+      <div class="metric-label">TSE reported last update</div>
+      <div id="tse-clock" class="timer-value orange">Waiting...</div>
+      <div id="tse-date" class="metric-detail">Awaiting timestamp from JSON</div>
+      <div id="tse-id" class="metric-detail"></div>
+    </div>
+
+    <div class="panel">
+      <div class="metric-label">Actual age of TSE data</div>
+      <div id="data-age" class="timer-value green">Waiting...</div>
+      <div id="difference-detail" class="metric-detail">
+        Difference between current time and TSE timestamp
       </div>
-    </div>
-
-    <div class="panel">
-      <h2>Candidate totals</h2>
-      <div id="candidates" class="muted">Waiting for data...</div>
+      <div class="metric-detail">Uses Brasília time (UTC−03:00)</div>
     </div>
   </section>
 
-  <footer>
-    <div id="timestamp">Last successful update: —</div>
-    <div>Refresh interval: 1 second.</div>
-    <div>If browser requests fail, check CORS access to the TSE endpoint.</div>
-  </footer>
-</main>
+  <!-- Election metrics -->
+  <section class="grid">
+    <div class="panel">
+      <div class="metric-label">Total votes</div>
+      <div id="total-votes" class="metric-value">—</div>
+      <div class="metric-detail">All vote categories</div>
+    </div>
+
+    <div class="panel">
+      <div class="metric-label">Valid candidate votes</div>
+      <div id="valid-votes" class="metric-value">—</div>
+      <div class="metric-detail">Votes for candidates</div>
+    </div>
+
+    <div class="panel">
+      <div class="metric-label">Sections totalized</div>
+      <div id="sections" class="metric-value">—</div>
+      <div id="sections-percent" class="metric-detail">—</div>
+      <div class="progress"><div id="sections-bar" class="progress-bar"></div></div>
+    </div>
+
+    <div class="panel">
+      <div class="metric-label">Electorate accounted for</div>
+      <div id="electorate" class="metric-value">—</div>
+      <div id="electorate-percent" class="metric-detail">—</div>
+      <div class="progress"><div id="electorate-bar" class="progress-bar"></div></div>
+    </div>
+  </section>
+
+  <section class="content">
+    <div class="panel">
+      <h2>Candidate vote share</h2>
+      <div id="chart-wrap"><canvas id="votes-chart"></canvas></div>
+    </div>
+
+    <div class="panel">
+      <h2>Candidate results</h2>
+      <div id="candidate-list" class="muted">Waiting for election data...</div>
+    </div>
+  </section>
+
+  <div class="footer">
+    Data source: TSE public results JSON.
+    The page refresh timer measures successful fetches, not necessarily new TSE data.
+    A newer fetch can return the same election data.
+    <br />
+    <span id="last-error"></span>
+  </div>
+</div>
 
 <script>
-const DATA_URL =
-  "https://resultados.tse.jus.br/oficial/ele2026/6258/dados/br/br-c0001-e006258-u.json";
+  const DATA_URL =
+    "https://resultados.tse.jus.br/oficial/ele2026/6258/dados/br/br-c0001-e006258-u.json";
 
-const fmt = value =>
-  (Number(value) || 0).toLocaleString("en-US");
+  const POLL_INTERVAL_MS = 1000;
 
-const pct = value =>
-  `${(Number(value) || 0).toLocaleString("en-US", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2
-  })}%`;
+  let lastSuccessfulFetch = null;
+  let tseTimestamp = null;
+  let chart = null;
+  let isFetching = false;
 
-let chart = null;
-let busy = false;
+  const numberFormat = new Intl.NumberFormat("en-US");
+  const chartColors = ["#60a5fa", "#34d399", "#fbbf24", "#c084fc", "#fb7185"];
 
-function extractCandidates(data) {
-  const result = [];
+  function formatNumber(value) {
+    const n = Number(value);
+    return Number.isFinite(n) ? numberFormat.format(n) : "—";
+  }
 
-  for (const office of data.carg || []) {
-    for (const group of office.agr || []) {
+  function formatPercent(value) {
+    if (value === undefined || value === null || value === "") return "—";
+    const n = Number(String(value).replace(",", "."));
+    return Number.isFinite(n) ? n.toFixed(2) + "%" : String(value) + "%";
+  }
+
+  function setText(id, value) {
+    document.getElementById(id).textContent = value;
+  }
+
+  function setProgress(id, value) {
+    const n = Number(String(value ?? "0").replace(",", "."));
+    const percent = Number.isFinite(n) ? Math.max(0, Math.min(100, n)) : 0;
+    document.getElementById(id).style.width = percent + "%";
+  }
+
+  function setConnection(ok, message) {
+    const dot = document.getElementById("status-dot");
+    dot.className = "dot " + (ok ? "online" : "error");
+    setText("connection-status", message);
+  }
+
+  function formatDuration(milliseconds) {
+    if (!Number.isFinite(milliseconds)) return "Unavailable";
+
+    const totalSeconds = Math.max(0, Math.floor(milliseconds / 1000));
+    const days = Math.floor(totalSeconds / 86400);
+    const hours = Math.floor((totalSeconds % 86400) / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const seconds = totalSeconds % 60;
+
+    if (days > 0) return `${days}d ${hours}h ${minutes}m ${seconds}s`;
+    if (hours > 0) return `${hours}h ${minutes}m ${seconds}s`;
+    if (minutes > 0) return `${minutes}m ${seconds}s`;
+    return `${seconds}s`;
+  }
+
+  function formatLocalClock(date) {
+    return date.toLocaleTimeString(undefined, {
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hour12: false
+    });
+  }
+
+  function formatLocalDate(date) {
+    return date.toLocaleDateString(undefined, {
+      year: "numeric",
+      month: "short",
+      day: "2-digit"
+    });
+  }
+
+  // TSE's dt/ht fields represent Brasília local date/time.
+  // Convert UTC−03:00 explicitly, independent of the browser's timezone.
+  function parseTseTimestamp(data) {
+    const dateString = data.dt || data.dg;
+    const timeString = data.ht || data.hg;
+
+    if (!dateString || !timeString) return null;
+
+    const dateParts = dateString.split("/").map(Number);
+    const timeParts = timeString.split(":").map(Number);
+
+    if (dateParts.length !== 3 || timeParts.length < 2) return null;
+
+    const [day, month, year] = dateParts;
+    const [hour, minute, second = 0] = timeParts;
+
+    if (![day, month, year, hour, minute, second].every(Number.isFinite)) {
+      return null;
+    }
+
+    // 17:06 in Brasília (UTC−03:00) equals 20:06 UTC.
+    const timestamp = Date.UTC(
+      year, month - 1, day, hour + 3, minute, second
+    );
+
+    const result = new Date(timestamp);
+    return Number.isNaN(result.getTime()) ? null : result;
+  }
+
+  function getCandidates(data) {
+    const cargo = data.carg?.find(item => item.cd === "1") || data.carg?.[0];
+    if (!cargo) return [];
+
+    const candidates = [];
+
+    for (const group of cargo.agr || []) {
       for (const party of group.par || []) {
         for (const candidate of party.cand || []) {
-          result.push({
-            name: candidate.nmu || candidate.nm || "Unknown",
-            party: party.sg || party.nm || "",
-            votes: Number(candidate.vap) || 0
+          candidates.push({
+            name: candidate.nmu || candidate.nm || "Unknown candidate",
+            party: party.sg || party.nm || group.nm || "Unknown party",
+            votes: Number(candidate.vap || 0),
+            percent: Number(
+              String(candidate.pvap || "0").replace(",", ".")
+            )
           });
         }
       }
     }
+
+    return candidates.sort((a, b) => b.votes - a.votes);
   }
 
-  return result;
-}
+  function updateChart(candidates) {
+    const labels = candidates.map(c => c.name);
+    const values = candidates.map(c => c.votes);
 
-function escapeHTML(value) {
-  return String(value).replace(/[&<>"']/g, char => ({
-    "&": "&amp;",
-    "<": "&lt;",
-    ">": "&gt;",
-    '"': "&quot;",
-    "'": "&#39;"
-  })[char]);
-}
-
-function setProgressBar(id, value) {
-  const safe = Math.max(0, Math.min(100, Number(value) || 0));
-  document.getElementById(id).style.width = `${safe}%`;
-}
-
-function renderChart(candidates) {
-  const colors = ["#60a5fa", "#34d399", "#fbbf24", "#c084fc"];
-
-  if (!chart) {
-    chart = new Chart(document.getElementById("pieChart"), {
-      type: "pie",
-      data: {
-        labels: candidates.map(c => c.name),
-        datasets: [{
-          data: candidates.map(c => c.votes),
-          backgroundColor: candidates.map((_, i) =>
-            colors[i % colors.length]),
-          borderColor: "#151e30",
-          borderWidth: 3
-        }]
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: {
-          legend: {
-            position: "bottom",
-            labels: { color: "#e5edf8", padding: 18 }
-          },
-          tooltip: {
-            callbacks: {
-              label: item => {
-                const total = item.dataset.data.reduce((a, b) => a + b, 0);
-                const share = total ? item.raw / total * 100 : 0;
-                return `${item.label}: ${fmt(item.raw)} (${pct(share)})`;
+    if (!chart) {
+      chart = new Chart(document.getElementById("votes-chart"), {
+        type: "pie",
+        data: {
+          labels,
+          datasets: [{
+            data: values,
+            backgroundColor: candidates.map((_, i) =>
+              chartColors[i % chartColors.length]
+            ),
+            borderColor: "#151d30",
+            borderWidth: 3
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: {
+              position: "bottom",
+              labels: { color: "#f1f5f9", padding: 18 }
+            },
+            tooltip: {
+              callbacks: {
+                label(context) {
+                  const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                  const percent = total ? context.raw / total * 100 : 0;
+                  return `${context.label}: ${formatNumber(context.raw)} (${percent.toFixed(2)}%)`;
+                }
               }
             }
           }
         }
-      }
-    });
-  } else {
-    chart.data.labels = candidates.map(c => c.name);
-    chart.data.datasets[0].data = candidates.map(c => c.votes);
-    chart.data.datasets[0].backgroundColor =
-      candidates.map((_, i) => colors[i % colors.length]);
-    chart.update("none");
+      });
+    } else {
+      chart.data.labels = labels;
+      chart.data.datasets[0].data = values;
+      chart.data.datasets[0].backgroundColor = candidates.map((_, i) =>
+        chartColors[i % chartColors.length]
+      );
+      chart.update("none");
+    }
   }
-}
 
-function renderCandidates(candidates) {
-  const total = candidates.reduce((sum, c) => sum + c.votes, 0);
-
-  document.getElementById("candidates").innerHTML =
-    candidates.map(c => {
-      const share = total ? c.votes / total * 100 : 0;
-
-      return `
-        <div class="candidate">
-          <div class="candidate-head">
-            <span class="candidate-name">${escapeHTML(c.name)}</span>
-            <span class="candidate-votes">${fmt(c.votes)}</span>
-          </div>
-          <div class="candidate-meta">
-            ${escapeHTML(c.party)} · ${pct(share)} of candidate votes
-          </div>
-          <div class="candidate-bar">
-            <div style="width:${Math.max(0, Math.min(100, share))}%"></div>
-          </div>
-        </div>`;
-    }).join("");
-}
-
-async function refresh() {
-  if (busy) return;
-  busy = true;
-
-  try {
-    const response = await fetch(DATA_URL, { cache: "no-store" });
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-
-    const data = await response.json();
-    const candidates = extractCandidates(data);
+  function updateCandidateList(candidates) {
+    const list = document.getElementById("candidate-list");
+    list.replaceChildren();
 
     if (!candidates.length) {
-      throw new Error("No candidates found in the JSON");
+      list.textContent = "No candidate data found in the response.";
+      return;
     }
 
-    const s = data.s || {};
-    const e = data.e || {};
-    const v = data.v || {};
+    for (const candidate of candidates) {
+      const row = document.createElement("div");
+      row.className = "candidate";
 
-    // Correct fields from the supplied TSE JSON:
-    // s.st = sections totalized; s.ts = total sections.
-    const countedSections = Number(s.st) || 0;
-    const totalSections = Number(s.ts) || 0;
-    const sectionsPercent = Number(s.pst) || 0;
+      const top = document.createElement("div");
+      top.className = "candidate-top";
 
-    document.getElementById("sections").textContent =
-      `${fmt(countedSections)} / ${fmt(totalSections)}`;
+      const identity = document.createElement("div");
+      const name = document.createElement("div");
+      name.className = "candidate-name";
+      name.textContent = candidate.name;
 
-    document.getElementById("sectionPercent").textContent =
-      `${pct(sectionsPercent)} totalized`;
+      const party = document.createElement("div");
+      party.className = "candidate-party";
+      party.textContent = candidate.party;
 
-    setProgressBar("sectionBar", sectionsPercent);
+      identity.append(name, party);
 
-    // e.est = electorate in totalized sections; e.te = total electorate.
-    const accountedElectorate = Number(e.est) || 0;
-    const totalElectorate = Number(e.te) || 0;
-    const electoratePercent = Number(e.pest) || 0;
+      const result = document.createElement("div");
+      result.className = "candidate-votes";
+      result.textContent = formatNumber(candidate.votes);
 
-    document.getElementById("electorate").textContent =
-      `${fmt(accountedElectorate)} / ${fmt(totalElectorate)}`;
+      const percent = document.createElement("div");
+      percent.className = "candidate-percent";
+      percent.textContent = formatPercent(candidate.percent);
 
-    document.getElementById("electoratePercent").textContent =
-      `${pct(electoratePercent)} accounted for`;
-
-    setProgressBar("electorateBar", electoratePercent);
-
-    document.getElementById("totalVotes").textContent = fmt(v.tv);
-    document.getElementById("validVotes").textContent = fmt(v.vvc);
-
-    renderChart(candidates);
-    renderCandidates(candidates);
-
-    document.getElementById("status").textContent =
-      `Connected · TSE time ${data.hg || "unknown"}`;
-
-    document.getElementById("statusDot").classList.remove("error");
-    document.getElementById("timestamp").textContent =
-      `Last successful update: ${new Date().toLocaleTimeString()}`;
-
-  } catch (error) {
-    document.getElementById("status").textContent =
-      `Update failed: ${error.message}`;
-    document.getElementById("statusDot").classList.add("error");
-  } finally {
-    busy = false;
+      result.appendChild(percent);
+      top.append(identity, result);
+      row.appendChild(top);
+      list.appendChild(row);
+    }
   }
-}
 
-refresh();
-setInterval(refresh, 1000);
+  function renderData(data) {
+    const votes = data.v || {};
+    const sections = data.s || {};
+    const electorate = data.e || {};
+
+    setText("total-votes", formatNumber(votes.tv));
+    setText("valid-votes", formatNumber(votes.vvc ?? votes.vv));
+
+    setText(
+      "sections",
+      `${formatNumber(sections.st)} / ${formatNumber(sections.ts)}`
+    );
+    setText("sections-percent", `${formatPercent(sections.pst)} totalized`);
+    setProgress("sections-bar", sections.pst);
+
+    setText(
+      "electorate",
+      `${formatNumber(electorate.est)} / ${formatNumber(electorate.te)}`
+    );
+    setText("electorate-percent", `${formatPercent(electorate.pest)} accounted for`);
+    setProgress("electorate-bar", electorate.pest);
+
+    const candidates = getCandidates(data);
+    updateChart(candidates);
+    updateCandidateList(candidates);
+
+    const timestamp = parseTseTimestamp(data);
+    if (timestamp) {
+      tseTimestamp = timestamp;
+      setText("tse-clock", formatLocalClock(timestamp));
+      setText("tse-date", formatLocalDate(timestamp) + " · Brasília time");
+      setText("tse-id", data.idg ? `TSE generation ID: ${data.idg}` : "");
+    } else {
+      setText("tse-clock", "Not provided");
+      setText("tse-date", "No valid dt/ht or dg/hg timestamp");
+      setText("tse-id", "");
+      tseTimestamp = null;
+    }
+  }
+
+  async function refreshData() {
+    if (isFetching) return;
+    isFetching = true;
+
+    try {
+      const response = await fetch(DATA_URL, { cache: "no-store" });
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+
+      const data = await response.json();
+      lastSuccessfulFetch = new Date();
+
+      renderData(data);
+      setConnection(true, "Connected to TSE");
+      setText("last-error", "");
+      setText("refresh-clock", `Last successful fetch: ${formatLocalClock(lastSuccessfulFetch)}`);
+    } catch (error) {
+      setConnection(false, "Update failed");
+      setText("last-error", `Fetch error: ${error.message}. Check connectivity or CORS.`);
+    } finally {
+      isFetching = false;
+    }
+  }
+
+  // These timers update every second without requiring another fetch.
+  function updateTimers() {
+    const now = new Date();
+
+    if (lastSuccessfulFetch) {
+      setText(
+        "refresh-age",
+        formatDuration(now.getTime() - lastSuccessfulFetch.getTime()) + " ago"
+      );
+    } else {
+      setText("refresh-age", "Waiting...");
+    }
+
+    if (tseTimestamp) {
+      const difference = now.getTime() - tseTimestamp.getTime();
+
+      if (difference >= 0) {
+        setText("data-age", formatDuration(difference));
+        setText("difference-detail", "Elapsed since the TSE-reported timestamp");
+      } else {
+        setText("data-age", formatDuration(Math.abs(difference)));
+        setText("difference-detail", "Browser time is earlier than the TSE timestamp; check your clock");
+      }
+    } else {
+      setText("data-age", "Unavailable");
+      setText("difference-detail", "Waiting for a valid TSE timestamp");
+    }
+  }
+
+  refreshData();
+  setInterval(refreshData, POLL_INTERVAL_MS);
+  updateTimers();
+  setInterval(updateTimers, 1000);
 </script>
 </body>
 </html>
